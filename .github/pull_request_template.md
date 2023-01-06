@@ -25,7 +25,7 @@ For static threshold standard details, see: [MLU-OPS Accuracy Acceptance Standar
 
 |     No.      |           Details            |      Check Results       |
 |----------------|---------------------------|---------------------|
-|        1       |          Supported hardware         | MLU270 <br> MLU290 <br>MLU370|
+|        1       |          Supported hardware         | MLU270 <br> MLU290 <br>MLU370<br>MLU590|
 |        2       |          Job types          |    block <br> U1 <br> U4    |
 |        3       |         Layouts            |  NHWC 、NCHW、ARRAY etc    |
 |        4       |         Whether multi-dimensions are supported              |                |
@@ -60,31 +60,54 @@ When a new operator is submitted, the test points are given and the test results
 | Whether it conforms to the operator restriction | Normal error |                      |
 | Whether illegal parameters are passed  | Normal error |                      |
 
-### 3.2 Performance Test
+### 3.2 Accuracy Test
+
+For the cases used in the New Feature Test section, the features and the number of cases are recorded here. When multiple operations are tested, multiple tables are needed to include details of these operations.
+
+Operation:
+
+|Test Point           | Description      | Quantity |  Comment |
+|----------           |----------        |----------|   ----------    |
+|Data type test       |half/float/int8|          |                 |
+|Mult-tensor test     |Supports 1-8 dims|          |                 |
+|Layout test          |Supports NCHW/NHWC|          |                 |
+|Zero element test    |Whether to support this test |          |                 |
+|Stability test       |--gtest_repeat=NUM<br>--thread=NUM |          |                 |
+|Mult-platform test   |MLU270/MLU290/MLU370/MLU590  |          |                 |
+|Nan/INF test        |Whether to support this test   |          |                 |
+
+### 3.3 Performance Test
 
 See [MLU-OPS Performance Acceptance Standard](../docs/MLU-OPS-Performance-Acceptance-Standard.md) for details.
 
 Platform ：MLU270
 
-|Operator|Mlu_hardware_time(us)|Mlu_interface_time(us)|Mlu_io_efficiency|Mlu_compute_efficiency|Mlu_workwpace_size(Bytes)|Data_type|Shape|
+|Operation|Mlu_hardware_time(us)|Mlu_interface_time(us)|Mlu_io_efficiency|Mlu_compute_efficiency|Mlu_workwpace_size(Bytes)|Data_type|Shape|
 |-----|----|----|----|----|----|------|-----|
 |op_name|   |    |     |    |    |    |     |
 |op_name|   |    |     |    |    |    |     |
 
 Platform ：MLU290
 
-|Operator|Mlu_hardware_time(us)|Mlu_interface_time(us)|Mlu_io_efficiency|Mlu_compute_efficiency|Mlu_workwpace_size(Bytes)|Data_type|Shape|
+|Operation|Mlu_hardware_time(us)|Mlu_interface_time(us)|Mlu_io_efficiency|Mlu_compute_efficiency|Mlu_workwpace_size(Bytes)|Data_type|Shape|
 |-----|----|----|----|----|----|------|-----|
 |op_name|   |    |     |    |    |    |     |
 |op_name|   |    |     |    |    |    |     |
 
 Platform：MLU370
 
-|Operator|Mlu_hardware_time(us)|Mlu_interface_time(us)|Mlu_io_efficiency|Mlu_compute_efficiency|Mlu_workwpace_size(Bytes)|Data_type|Shape|
+|Operation|Mlu_hardware_time(us)|Mlu_interface_time(us)|Mlu_io_efficiency|Mlu_compute_efficiency|Mlu_workwpace_size(Bytes)|Data_type|Shape|
 |-----|----|----|----|----|----|------|-----|
 |op_name|   |    |     |    |    |    |     |
 |op_name|   |    |     |    |    |    |     |
 
-### 3.3 Summary Analysis
+Platform：MLU590
+
+|Operation|Mlu_hardware_time(us)|Mlu_interface_time(us)|Mlu_io_efficiency|Mlu_compute_efficiency|Mlu_workwpace_size(Bytes)|Data_type|Shape|
+|-----|----|----|----|----|----|------|-----|
+|op_name|   |    |     |    |    |    |     |
+|op_name|   |    |     |    |    |    |     |
+
+### 3.4 Summary Analysis
 
 Please give a brief overview here, if you want to note and summarize the content.

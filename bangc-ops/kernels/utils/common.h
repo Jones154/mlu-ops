@@ -41,6 +41,89 @@ __mlu_func__ inline T __mluop_max(T a, T b) {
   return a > b ? a : b;
 }
 
+/******************************************************************************
+ * MLUOP FUNC: __mluop_float2half
+ * param 'dst' is the destination pointer in NRAM.
+ * param 'src' is the source pointer in NRAM.
+ * param 'src_count' is the src element count.
+ * Note:
+ *      The rounding mode on MLU200 is rd, on MLU300 is rn.
+ ******************************************************************************/
+__mlu_func__ inline void __mluop_float2half(half *dst, float *src,
+                                            int src_count) {
+#if __BANG_ARCH__ >= 300
+  __bang_float2half_rn(dst, src, src_count);
+#else
+  __bang_float2half_rd(dst, src, src_count);
+#endif
+}
+
+__mlu_func__ inline half __mluop_float2half(float a) {
+#if __BANG_ARCH__ >= 300
+  return __float2half_rn(a);
+#else
+  return __float2half_rd(a);
+#endif
+}
+
+/******************************************************************************
+ * MLUOP FUNC: computeDiv
+ * param 'nram_dst' is the nram destination address, which supports half or
+float data type.  * param 'nram_src0' is the nram source address, which has the
+same data type as nram_dst.  * param 'nram_src1' is the nram source address,
+which has the same data type as nram_dst.  * param 'nram_addition' is the nram
+addition address. Pass NULL if the data type of nram_src  *   is float and
+architecture >= 300, otherwise the space size is at least twice as much as
+ *nram_src.
+ * param 'deal_num' is the num of input data.
+ * remarks:
+ *   1. nram_dst and nram_src can not be homologous operand if architecture <
+300.  *   2. On MLU2XX, nram_src1(dividend) must be positive due to limitations
+of bang_active_reciphp.
+ ******************************************************************************************/
+template <typename T>
+static __mlu_func__ void computeDiv(T *nram_dst, T *nram_src0, T *nram_src1,
+                                    T *nram_addition, int is_high_precision,
+                                    int deal_num) {
+  if (sizeof(T) == sizeof(float)) {
+#if (__BANG_ARCH__ >= 300) && (__BANG_ARCH__ != 372)
+    __bang_div((float *)nram_dst, (float *)nram_src0, (float *)nram_src1,
+               deal_num);
+#else
+    __bang_active_reciphp((float *)nram_dst, (float *)nram_src1, deal_num);
+    __bang_mul((float *)nram_dst, (float *)nram_src0, (float *)nram_dst,
+               deal_num);
+#endif
+  } else if (sizeof(T) == sizeof(half)) {
+#if (__BANG_ARCH__ >= 300) && (__BANG_ARCH__ != 372)
+    __bang_div((half *)nram_dst, (half *)nram_src0, (half *)nram_src1,
+               deal_num);
+#else
+    if (is_high_precision) {
+#if __BANG_ARCH__ == 372
+      __bang_half2float((float *)nram_addition, (half *)nram_src1, deal_num);
+      __bang_recip((float *)nram_addition, (float *)nram_addition, deal_num);
+      __mluop_float2half((half *)nram_src1, (float *)nram_addition, deal_num);
+      __bang_mul((half *)nram_dst, (half *)nram_src0, (half *)nram_src1,
+                 deal_num);
+#else
+      __bang_half2float((float *)nram_addition, (half *)nram_src1, deal_num);
+      __bang_active_reciphp((float *)nram_addition, (float *)nram_addition,
+                            deal_num);
+      __mluop_float2half((half *)nram_src1, (float *)nram_addition, deal_num);
+      __bang_mul((half *)nram_dst, (half *)nram_src0, (half *)nram_src1,
+                 deal_num);
+#endif
+    } else {
+      __bang_active_reciphp((T *)nram_dst, (T *)nram_src1, deal_num);
+      __bang_mul((T *)nram_dst, (T *)nram_src0, (T *)nram_dst, deal_num);
+    }
+#endif
+  } else {
+    return;
+  }
+}
+
 /******************************************************************************************
  * MLUOPS FUNC: computeRecip
  * param 'nram_dst' is the nram destination address, which supports half or
@@ -338,6 +421,22 @@ __mlu_func__ void __float2int32(int32_t *dst, float *dst_addition, float *src,
 #endif
 }
 
+/******************************************************************************
+ * MLUOPS FUNC: __float2half
+ * param 'dst' is the destination pointer in NRAM.
+ * param 'src' is the source pointer in NRAM.
+ * param 'src_count' is the src element count.
+ * Note:
+ *      The rounding mode on MLU200 is rd, on MLU300 is rn.
+ ******************************************************************************/
+__mlu_func__ inline void __float2half(half *dst, float *src, int src_count) {
+#if __BANG_ARCH__ >= 300
+  __bang_float2half_rn(dst, src, src_count);
+#else
+  __bang_float2half_rd(dst, src, src_count);
+#endif
+}
+
 __mlu_func__ void pvLock() {
 #if __BANG_ARCH__ == 270
   if (coreId != 0x80) {
@@ -352,6 +451,111 @@ __mlu_func__ void pvUnlock() {
     __bang_unlock(0, 0);
   }
 #endif
+}
+
+/******************************************************************************
+ * MLUOPS FUNC: loadStr2D
+ * param 'size' is the getC size.
+ * param 'seg_num' is the loop times.
+ * param 'dst_str' is nram stride, c_align on onchip.
+ * param 'src_str' is gdram stride, as usual is equal to c_unalign.
+ * Note:
+ *      The data between 'size' and 'dst_str' in every seg_num 
+ *      may be contaminated.
+ ******************************************************************************/
+template <typename T>
+__mlu_func__ void loadStr2D(T *dst, T *src, int size, int dst_str, int src_str,
+                            int seg_num) {
+  if (dst_str == src_str && size == src_str) {
+    __memcpy(dst, src, src_str * seg_num * sizeof(T), GDRAM2NRAM);
+  } else if ((size == src_str || src_str <= dst_str) &&
+             src_str * sizeof(T) <= 512) {  // IO efficiency is best when
+                                            // datasize gather than 512bytes
+    T *tmp = (T *)dst + (dst_str - src_str) * seg_num;
+    __memcpy(tmp, src, (src_str * (seg_num - 1) + size) * sizeof(T),
+             GDRAM2NRAM);
+    __memcpy(dst, tmp, size * sizeof(T), NRAM2NRAM, dst_str * sizeof(T),
+             src_str * sizeof(T), seg_num - 1);
+  } else {
+    __memcpy(dst, src, size * sizeof(T), GDRAM2NRAM, dst_str * sizeof(T),
+             src_str * sizeof(T), seg_num - 1);
+  }
+}
+
+/******************************************************************************
+ * MLUOPS FUNC: loadStr3D
+ * param 'size' is the getC size.
+ * param 'seg_num_in' is the in loop times.
+ * param 'seg_num_out' is the out loop times.
+ * param 'dst_str_in' is nram in stride.
+ * param 'dst_str_out' is nram out stride.
+ * param 'src_str_in' is gdram in stride.
+ * param 'src_str_out' is gdram out stride.
+ ******************************************************************************/
+template <typename T>
+__mlu_func__ void loadStr3D(T *dst, T *src, int size, int seg_num_in,
+                            int seg_num_out, int dst_str_in, int dst_str_out,
+                            int src_str_in, int src_str_out) {
+  T *tmp_dst = dst;
+  T *tmp_src = src;
+  for (int i = 0; i < seg_num_out; ++i) {
+    loadStr2D(tmp_dst, tmp_src, size, dst_str_in, src_str_in, seg_num_in);
+    tmp_src = (T *)tmp_src + src_str_out;
+    tmp_dst = (T *)tmp_dst + dst_str_out;
+  }
+}
+
+/******************************************************************************
+ * MLUOPS FUNC: storeStr2D
+ * param 'size' is the getC size.
+ * param 'seg_num' is the loop times.
+ * param 'dst_str' is gdram stride, c_align on onchip.
+ * param 'src_str' is nram stride, as usual is equal to c_unalign.
+ * Note:
+ *      If the data to be stored will reuse later,
+ *      don't use this function, use MEMCPY instead.
+ ******************************************************************************/
+template <typename T>
+__mlu_func__ void storeStr2D(T *dst, T *src, int size, int seg_num, int dst_str,
+                             int src_str) {
+  if ((size == dst_str && dst_str <= src_str) &&
+      dst_str * sizeof(T) <=
+          512) {  // IO efficiency is best when datasize gather than 512bytes
+    if (dst_str != src_str) {
+      __memcpy(src, src, size * sizeof(T), NRAM2NRAM, dst_str * sizeof(T),
+               src_str * sizeof(T), seg_num - 1);
+    }
+    __memcpy(dst, src, size * seg_num * sizeof(T), NRAM2GDRAM);
+  } else {
+    __memcpy(dst, src, size * sizeof(T), NRAM2GDRAM, dst_str * sizeof(T),
+             src_str * sizeof(T), seg_num - 1);
+  }
+}
+
+/******************************************************************************
+ * MLUOPS FUNC: storeStr3D
+ * param 'size' is the getC size.
+ * param 'seg_num_in' is the in loop times.
+ * param 'seg_num_out' is the out loop times.
+ * param 'dst_str_in' is gdram in stride.
+ * param 'dst_str_out' is gdram out stride.
+ * param 'src_str_in' is nram in stride.
+ * param 'src_str_out' is nram out stride.
+ * Note:
+ *      If the data to be stored will reuse later,
+ *      don't use this function, use MEMCPY instead.
+ ******************************************************************************/
+template <typename T>
+__mlu_func__ void storeStr3D(T *dst, T *src, int size, int seg_num_in,
+                             int seg_num_out, int dst_str_in, int dst_str_out,
+                             int src_str_in, int src_str_out) {
+  T *tmp_dst = dst;
+  T *tmp_src = src;
+  for (int i = 0; i < seg_num_out; ++i) {
+    storeStr2D(tmp_dst, tmp_src, size, seg_num_in, dst_str_in, src_str_in);
+    tmp_src = (T *)tmp_src + src_str_out;
+    tmp_dst = (T *)tmp_dst + dst_str_out;
+  }
 }
 
 #endif  // KERNELS_UTILS__COMMON_H_

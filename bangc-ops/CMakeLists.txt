@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.3)
+cmake_minimum_required(VERSION 3.5)
 
 project(mluops VERSION ${BUILD_VERSION})
 include_directories("${CMAKE_CURRENT_SOURCE_DIR}")
@@ -83,9 +83,7 @@ endif()
 
 if (NOT MLUOP_MLU_ARCH_LIST)
   message(STATUS "build all arch")
-  set(BANG_CNCC_FLAGS "${BANG_CNCC_FLAGS}" "--bang-mlu-arch=mtp_270"
-                                           "--bang-mlu-arch=mtp_290"
-                                           "--bang-mlu-arch=mtp_372"
+  set(BANG_CNCC_FLAGS "${BANG_CNCC_FLAGS}" "--bang-mlu-arch=mtp_372"
                                            "--bang-mlu-arch=mtp_592")
 else()
   foreach (arch ${MLUOP_MLU_ARCH_LIST})
@@ -127,15 +125,50 @@ foreach(kernel ${build_kernel})
     continue()
   endif()
   file(GLOB_RECURSE src_files ${src_files} "${CMAKE_CURRENT_SOURCE_DIR}/kernels/${kernel}/*.cpp" "${CMAKE_CURRENT_SOURCE_DIR}/kernels/${kernel}/*.mlu")
-  file(GLOB_RECURSE obj_files ${obj_files} "${CMAKE_CURRENT_SOURCE_DIR}/kernels/${kernel}/${MLUOP_TARGET_CPU_ARCH}/*.o")
+  file(GLOB_RECURSE arch_binary_files ${arch_binary_files} "${CMAKE_CURRENT_SOURCE_DIR}/kernels/${kernel}/${MLUOP_TARGET_CPU_ARCH}/*.o")
 endforeach()
+
+file(GLOB_RECURSE archive_binary_files ${archive_binary_files} "${CMAKE_CURRENT_SOURCE_DIR}/kernels/kernel_wrapper/lib/*.a")
 
 file(GLOB_RECURSE core_src_files ${core_src_files} "${CMAKE_CURRENT_SOURCE_DIR}/core/*.cpp")
 # set(src_files ${src_files} "${CMAKE_CURRENT_SOURCE_DIR}/test/main.cpp")
 
-bang_add_library(mluops SHARED ${core_src_files} ${src_files})
-target_link_libraries(mluops cnrt cndrv dl)
-target_link_libraries(mluops ${obj_files})
+if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/${MLUOP_SYMBOL_VIS_FILE})
+  message(STATUS "${MLUOP_SYMBOL_VIS_FILE} exists.")
+else()
+  message(FATAL_ERROR "${MLUOP_SYMBOL_VIS_FILE} doesn't exist.")
+endif()
+
+set(LINK_FLAGS "-Wl,--version-script=${CMAKE_CURRENT_SOURCE_DIR}/${MLUOP_SYMBOL_VIS_FILE}")
+message(STATUS "LINK_FLAGS:${LINK_FLAGS}")
+add_library(mluopscore STATIC ${core_src_files})
+
+if (archive_binary_files MATCHES ".a")
+  if ("${CMAKE_CURRENT_SOURCE_DIR}/kernels/kernel_wrapper/wrapper.cpp" IN_LIST src_files)
+    list(REMOVE_ITEM src_files "${CMAKE_CURRENT_SOURCE_DIR}/kernels/kernel_wrapper/wrapper.cpp")
+  endif()
+  message(STATUS "Build MLUOP with static object file:${archive_binary_files}")
+else()
+  file(GLOB_RECURSE wrapper_binary_files ${wrapper_binary_files} "${CMAKE_CURRENT_SOURCE_DIR}/kernels/kernel_wrapper/lib/*.o")
+  message(STATUS "Build External lib with object files.")
+  execute_process(COMMAND g++ -c -std=c++11 -fPIC -I ${CMAKE_CURRENT_SOURCE_DIR}
+                                 -I ${NEUWARE_HOME}/include
+                                 ${CMAKE_CURRENT_SOURCE_DIR}/kernels/kernel_wrapper/wrapper.cpp
+                                 -o ${CMAKE_CURRENT_SOURCE_DIR}/kernels/kernel_wrapper/lib/wrapper.cpp.o)
+  execute_process(COMMAND ar -rc ${CMAKE_CURRENT_SOURCE_DIR}/kernels/kernel_wrapper/lib/libextops.a
+                                  ${wrapper_binary_files} ${CMAKE_CURRENT_SOURCE_DIR}/kernels/kernel_wrapper/lib/wrapper.cpp.o)
+  execute_process(COMMAND rm ${CMAKE_CURRENT_SOURCE_DIR}/kernels/kernel_wrapper/lib/wrapper.cpp.o)
+endif()
+
+bang_add_library(mluops SHARED ${src_files})
+target_link_libraries(mluops
+  -Wl,--start-group
+  ${arch_binary_files} ${wrapper_binary_files}
+  -Wl,--whole-archive ${archive_binary_files} mluopscore -Wl,--no-whole-archive
+  cnrt cndrv dl
+  -Wl,--end-group
+)
+target_link_libraries(mluops ${LINK_FLAGS})
 set_target_properties(mluops PROPERTIES
   OUTPUT_NAME "mluops"
   PREFIX      "lib"

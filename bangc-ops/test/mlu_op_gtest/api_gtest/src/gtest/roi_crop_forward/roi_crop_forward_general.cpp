@@ -60,7 +60,7 @@ class roi_crop_forward_general
     uint64_t i_ele_num = mluOpGetTensorElementNum(input_desc_);
     uint64_t i_bytes = mluOpDataTypeBytes(i_dtype) * i_ele_num;
     if (i_bytes > 0) {
-      GTEST_CHECK(CNRT_RET_SUCCESS == cnrtMalloc(&input_, i_bytes))
+      GTEST_CHECK(CNRT_RET_SUCCESS == cnrtMalloc(&input_, i_bytes));
     }
 
     MLUOP_CHECK(mluOpCreateTensorDescriptor(&grid_desc_));
@@ -108,6 +108,7 @@ class roi_crop_forward_general
   void destroy() {
     VLOG(4) << "Destroy parameters.";
     if (handle_) {
+      CNRT_CHECK(cnrtQueueSync(handle_->queue));
       MLUOP_CHECK(mluOpDestroy(handle_));
       handle_ = NULL;
     }

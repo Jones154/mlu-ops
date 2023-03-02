@@ -1,11 +1,11 @@
-cmake_minimum_required(VERSION 3.3)
+cmake_minimum_required(VERSION 3.5)
 cmake_policy(SET CMP0048 NEW) # Use project(... VERSION ...)
 project(mlu_op_test)
 set(CMAKE_CXX_STANDARD 14)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # check
-message("[MLUOP GTEST STYLE]: ")
+message(STATUS "[MLUOP GTEST STYLE]: ")
 set(MLUOP_BUILD_SPECIFIC_OP ${MLUOP_BUILD_SPECIFIC_OP})
 
 execute_process(COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/tools/gtest_style.py ${MLUOP_BUILD_SPECIFIC_OP} RESULT_VARIABLE STYLE_CHECK)
@@ -13,7 +13,7 @@ if (STYLE_CHECK)
   message(FATAL_ERROR "-- Pleace check gtest code manually.")
 endif()
 
-message("[MLUOP GTEST REGISTER OP]: ")
+message(STATUS "[MLUOP GTEST REGISTER OP]: ")
 file(GLOB CASE_LIST "${CMAKE_CURRENT_SOURCE_DIR}/pb_gtest/src/gtest/*case_list.cpp")
 execute_process(COMMAND rm -f ${CASE_LIST})
 execute_process(COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/pb_gtest/src/gtest/register_op.py ${MLUOP_BUILD_SPECIFIC_OP})
@@ -70,7 +70,7 @@ else()
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -mavx2")
 endif()
 
-message("[MLUOP GTEST PROTOC]: ")
+message(STATUS "[MLUOP GTEST PROTOC]: ")
 set(PROTO_PATH "${CMAKE_CURRENT_SOURCE_DIR}/pb_gtest/mlu_op_test_proto")
 file(GLOB PROTO_FILES "${PROTO_PATH}/mlu_op_test.proto")
 
@@ -118,12 +118,11 @@ set(MLUOP_API_GTEST_SRC "${CMAKE_CURRENT_SOURCE_DIR}/api_gtest/src/*.cpp"
 
 include_directories("${GOOGLETEST_INCLUDE}")
 include_directories("${MLUOP_GTEST_INCLUDE}")
-include_directories("${PROTO_PATH}")
-include_directories("${MLUOP_PB_GTEST_INCLUDE}")
-include_directories("${MLUOP_API_GTEST_INCLUDE}")
 
 file(GLOB_RECURSE gtest_mlu_files FOLLOW_SYMLINKS "${CMAKE_CURRENT_LIST_DIR}/pb_gtest/src/internal_kernel/*")
+list(APPEND BANG_CNCC_INCLUDE_ARGS -I${CMAKE_CURRENT_SOURCE_DIR}/pb_gtest/src)
 bang_add_library(mluop_gtest_kernels STATIC "${gtest_mlu_files}")
+target_include_directories(mluop_gtest_kernels PRIVATE ${MLUOP_PB_GTEST_INCLUDE})
 
 file(GLOB SRC_DIR "${GOOGLETEST_SRC}/*.cc")
 #add_library(gtest_shared SHARED ${SRC_DIR})
@@ -141,6 +140,7 @@ else()
 endif()
 
 add_library(mluop_pb_gtest_obj OBJECT ${MLUOP_PB_TEST_DIR} ${MLUOP_PB_GTEST_DIR} ${PROTO_HDRS})
+target_include_directories(mluop_pb_gtest_obj PRIVATE ${MLUOP_PB_GTEST_INCLUDE} ${PROTO_PATH})
 add_dependencies(mluop_pb_gtest_obj mluop_build_proto)
 add_executable(mluop_gtest $<TARGET_OBJECTS:mluop_pb_gtest_obj>)
 target_link_libraries(mluop_gtest mluops)
@@ -171,6 +171,7 @@ else()
 endif()
 
 add_library(mluop_api_gtest_obj OBJECT ${MLUOP_API_TEST_DIR} ${MLUOP_API_GTEST_DIR})
+target_include_directories(mluop_api_gtest_obj PRIVATE ${MLUOP_API_GTEST_INCLUDE})
 add_executable(mluop_api_gtest $<TARGET_OBJECTS:mluop_api_gtest_obj>)
 target_link_libraries(mluop_api_gtest cnrt cndev cndrv cndev pthread gtest_shared mluops stdc++ m dl)
 target_link_libraries(mluop_api_gtest ${LIBXML2_LIBRARIES} ${EXTRA_LIBS})

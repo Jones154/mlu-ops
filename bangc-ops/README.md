@@ -60,17 +60,14 @@
 
 - 多MLU平台架构编译
 
-  - 当不指定架构时，默认编译支持`MLU270/MLU290/MLU370`板卡的 `libmluops.so`，运行时动态选择`MLU270/MLU290/MLU370`
+  - 当不指定架构时，默认编译支持`MLU370`板卡的 `libmluops.so`，运行时动态选择`MLU370`
 
   - 编译指定MLU板卡
 
       ```sh
       ./build.sh            # 编译多架构的版本，libmluops.so 体积较大，cncc使用多arch的cnfatbin封装
-      ./build.sh  --mlu270  # 编译 MLU270 板卡专用版本，cncc使用选项--bang-mlu-arch=mtp_270
-      ./build.sh  --mlu290  # 编译 MLU290 板卡专用版本，cncc使用选项--bang-mlu-arch=mtp_290
       ./build.sh  --mlu370  # 编译 MLU370 板卡专用版本，cncc使用选项--bang-mlu-arch=mtp_372
-      ./build.sh  --mlu270 --filter="abs;expand"  # mlu270 下编译 abs 算子和 expand 算子
-      ./build.sh  --mlu270 --mlu370 --filter="abs;expand"  # mlu270 和 mlu370 下编译 abs 算子和 expand 算子
+      ./build.sh  --mlu370 --filter="abs;expand"  # mlu370 下编译 abs 算子和 expand 算子
       ```
 
 - kernel_depends.toml
@@ -80,6 +77,20 @@
   ```sh
   <op_name> = ["dep_op1", "dep_op2", ...]
   ```
+
+- gen_symbol_visibility_map.py
+
+  - `gen_symbol_visibility_map.py`脚本用于解析`mlu_op.h`头文件，获取函数名，生成`symbol_visibility.map`配置文件。
+    ```sh
+    MLUOP_ABI {
+	    global: op1_func;op2_func;
+	    local: *;
+    };
+    ```
+    global：表示符号是全局的（外部的）
+    local：表示符号是本地的，即对外不可见
+  - 执行build.sh编译时，将自动执行`gen_symbol_visibility_map.py`生成`symbol_visibility.map`配置文件。
+  - 在编译阶段依据`symbol_visibility.map`文件中global字段定义的符号表，将动态库`libmluops.so`中除global中定义的符号外其他符号定义为local。
 
 - 命令行参数
 
@@ -91,7 +102,7 @@
   | `NEUWARE_HOME`              | 用户声明，或`source ../env.sh`设置 | neuware路径，包含cnrt,cndrv                            | `NEUWARE_HOME`              |                                      |
   | `MLUOP_BUILD_COVERAGE_TEST` | OFF                                | 代码覆盖率测试                                         | `MLUOP_BUILD_COVERAGE_TEST` | -c<br />--coverage                   |
   | `MLUOP_BUILD_ASAN_CHECK`    | OFF                                | 开启ASAN内存检查工具                                   | `MLUOP_BUILD_ASAN_CHECK`    | --asan                               |
-  | `MLUOP_MLU_ARCH_LIST`       | `mtp_270/mtp_290/mtp_372`          | 目标mlu架构列表，分号分割的字符串，如"mtp_270;mtp_372" | `MLUOP_MLU_ARCH_LIST`       | --mlu270<br />--mlu290<br />--mlu370 |
+  | `MLUOP_MLU_ARCH_LIST`       | `mtp_372`          | 目标mlu架构列表，分号分割的字符串，如"mtp_372" | `MLUOP_MLU_ARCH_LIST`       | --mlu370 |
   | `MLUOP_BUILD_SPECIFIC_OP`   | 空                                 | 编译指定的算子                                         | `MLUOP_BUILD_SPECIFIC_OP`   | --filter                             |
 
   

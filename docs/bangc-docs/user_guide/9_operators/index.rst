@@ -100,6 +100,12 @@ mluOpPolyNms
 -----------------------------
 计算不规则四边形的非极大值抑制，用于删除高度冗余的不规则四边形输入框。
 
+.. _nms_rotated:
+
+mluOpNmsRotated
+-----------------------------
+计算旋转Box的非极大值抑制。
+
 .. _generate_proposal_v2:
 
 mluOpGenerateProposalsV2
@@ -437,13 +443,13 @@ mluOpThreeNNForward
 -----------------------------
 该算子为点云`unknown`集合中的点的寻找来自`known`集合中的前`3`个邻近点。点云数据点的坐标为`(x, y, z)`， 通过计算平方差距离后排序，得到前3个邻近点及其在集合中的`index`。
 
-.. _carafe_forward:
+.. _carafe_backward:
 
 mluOpCarafeBackward
 ----------------------------------
 CarafeForward的反向功能，即根据输入特征图、上采样核函数的滤波器张量以及损失函数对输出特征图的梯度张量，得到损失函数对输入特征图和上采样核函数滤波器的梯度张量。
 
-.. _carafe_backward:
+.. _carafe_forward:
 
 mluOpCarafeForward
 ----------------------------------
@@ -656,3 +662,36 @@ Unique
 .. figure:: ../images/unique.png
 
 其中 ``x`` 表示输入数据，``y`` 表示输出数据。
+
+.. _moe_dispatch_forward:
+
+MoeDispatchForward
+-----------------------------------------
+
+MoE算法中对输入进行重新分配。
+
+.. _moe_dispatch_backward_data:
+
+mluOpMoeDispatchBackwardData
+----------------------------------
+MoE算法中对输入进行重新分配（dispatch）的反向算子，用于计算 input 的梯度 `grad_input`。
+
+
+.. _roipoint_pool3d:
+
+mluOpRoiPointPool3d
+----------------------------------
+该算子功能是筛选出3D bounding boxes内的点云数据坐标和特征。LiDAR坐标系下，判断点云数据坐标是否在bounding box边框内的计算公式为：
+
+.. math::
+
+   cz = cz + \frac{dz}{2} \\
+   local\_x = (x - cx) * cos(-rz) - (y - cy) * sin(-rz) \\
+   local\_y = (x - cx) * sin(-rz) + (y - cy) * cos(-rz) \\
+   in\_flag = |local\_x| < \frac{dx}{2} \& |local\_y| < \frac{dy}{2} \& |z - cz| <= \frac{dz}{2}
+
+.. _moe_dispatch_backward_gate:
+
+mluOpMoeDispatchBackwardGate
+----------------------------------
+MoE算法中对输入进行重新分配（dispatch）的反向算子，用于计算gates的梯度`grad_gates`。
